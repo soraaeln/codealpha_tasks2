@@ -43,7 +43,7 @@ git clone https://github.com/soraaeln/codealpha_tasks2.git```
 
 ```
 ### Move to project directory
-cd codealpha_tasks
+cd codealpha_tasks2
 
 ### Start server
 python manage.py runserver
