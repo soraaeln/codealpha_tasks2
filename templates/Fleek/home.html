@@ -1,0 +1,370 @@
+{% extends "Fleek/base.html" %}
+{% block title %}Home | Fleek{% endblock %}
+{% block content %}
+<section class="feed-page feed-page-clean">
+  <div class="feed-main feed-main-wide">
+    <header class="feed-head feed-head-clean card">
+      <div>
+        <p class="feed-eyebrow">Fleek</p>
+        <h1 class="feed-title">All Posts</h1>
+      </div>
+      <form class="header-search" method="get" action="{% url 'feed' %}">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input
+          type="search"
+          name="q"
+          value="{{ search_query }}"
+          placeholder="Search Fleek users or posts"
+          aria-label="Search Fleek users or posts"
+        >
+      </form>
+    </header>
+
+    {% if search_query %}
+      <section class="side-section search-results card">
+        <div class="side-head">
+          <h3>Search results</h3>
+          <a href="{% url 'feed' %}">Clear</a>
+        </div>
+        <div class="suggestion-list">
+          {% for person in people|slice:":6" %}
+            <a class="suggestion-row" href="{% url 'profile' person.username %}">
+              <div class="suggestion-avatar">
+                {% if person.avatar_url %}
+                  <img
+                    src="{{ person.avatar_url }}"
+                    alt="{{ person.username }}"
+                    style="object-position: {{ person.avatar_position_x }}% {{ person.avatar_position_y }}%;"
+                  >
+                {% else %}
+                  {{ person.username|first|upper }}
+                {% endif %}
+              </div>
+              <div class="suggestion-info">
+                <strong>{{ person.nickname|default:person.username }}</strong>
+                <span>{{ person.bio|default:"No bio yet" }}</span>
+              </div>
+            </a>
+          {% empty %}
+            <div class="empty-note">No users matched your search.</div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="feed-list">
+      {% for post in posts %}
+        <article class="post-card card post-card-wide" id="post-{{ post.id }}">
+          <div class="post-head-row">
+            <a class="post-user" href="{% url 'profile' post.author.username %}">
+              <div class="post-avatar-wrap">
+                {% if post.author.avatar_url %}
+                  <img
+                    class="post-avatar post-avatar-img"
+                    src="{{ post.author.avatar_url }}"
+                    alt="{{ post.author.username }}"
+                    style="object-position: {{ post.author.avatar_position_x }}% {{ post.author.avatar_position_y }}%;"
+                  >
+                {% else %}
+                  <div class="post-avatar">{{ post.author.username|first|upper }}</div>
+                {% endif %}
+              </div>
+              <div>
+                <div class="post-name">{{ post.author.username }}</div>
+                <div class="post-meta">{{ post.created_at|date:"M d, Y H:i" }}</div>
+              </div>
+            </a>
+            {% if post.author == current_user %}
+              <div class="post-menu">
+                <button
+                  class="post-menu-button"
+                  type="button"
+                  data-menu-toggle="post-menu-{{ post.id }}"
+                  aria-expanded="false"
+                  aria-label="Post options"
+                >
+                  <i class="fa-solid fa-ellipsis"></i>
+                </button>
+                <div class="post-menu-popover" id="post-menu-{{ post.id }}" aria-hidden="true">
+                  <a class="post-menu-item" href="{% url 'edit_post' post.id %}">Edit</a>
+                  <form method="post" action="{% url 'delete_post' post.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="post-menu-item post-menu-delete">Delete</button>
+                  </form>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+
+          {% if post.media_src %}
+            <div class="post-image-box">
+              {% if post.is_video %}
+                <video controls preload="metadata">
+                  <source src="{{ post.media_src }}">
+                  Your browser does not support this video.
+                </video>
+              {% else %}
+                <img src="{{ post.media_src }}" alt="Post media" style="object-position: {{ post.media_position_x }}% {{ post.media_position_y }}%;">
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <div class="post-actions-row">
+            <div class="actions-left">
+              <form method="post" action="{% url 'toggle_like' post.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="action-btn{% if post.id in liked_post_ids %} liked{% endif %}" type="submit" title="Like">
+                  <i class="{% if post.id in liked_post_ids %}fa-solid{% else %}fa-regular{% endif %} fa-heart"></i>
+                </button>
+              </form>
+              <button
+                class="action-btn"
+                type="button"
+                data-comment-open="comments-modal-{{ post.id }}"
+                title="Comments"
+              >
+                <i class="fa-regular fa-comment"></i>
+              </button>
+              <button
+                class="action-btn{% if post.id in shared_post_ids %} liked{% endif %}"
+                type="button"
+                data-share-open="share-modal-{{ post.id }}"
+                title="Share"
+              >
+                <i class="fa-regular fa-paper-plane"></i>
+              </button>
+            </div>
+            <span class="post-counts">{{ post.likes_count }} likes &middot; {{ post.comments_count }} comments &middot; {{ post.shares_count }} shares</span>
+          </div>
+
+          <div class="post-body">
+            <div class="likes-line">Posted by <strong>{{ post.author.username }}</strong></div>
+            <p class="caption-text">{{ post.caption|linebreaksbr }}</p>
+            <div class="time-text">{{ post.created_at|date:"M d, Y" }}</div>
+          </div>
+        </article>
+
+        <div class="comment-modal" id="comments-modal-{{ post.id }}" aria-hidden="true">
+          <div class="comment-modal-backdrop" data-comment-close></div>
+          <div class="comment-modal-card card" role="dialog" aria-modal="true" aria-label="Comments">
+            <div class="comment-modal-head">
+              <div>
+                <strong>Comments</strong>
+                <p class="muted">All comments on this post</p>
+              </div>
+              <button class="modal-close" type="button" data-comment-close>&times;</button>
+            </div>
+
+            <div class="comment-modal-post comment-modal-post--simple">
+              <div>
+                <strong>{{ post.author.username }}</strong>
+                <p>{{ post.caption|linebreaksbr }}</p>
+              </div>
+            </div>
+
+            <div class="comment-modal-list">
+              {% for comment in post.comments.all %}
+                <div class="comment-row">
+                  <div class="comment-row-main">
+                    <strong>{{ comment.author.username }}</strong>
+                    <span>{{ comment.body|linebreaksbr }}</span>
+                  </div>
+                  {% if comment.author == current_user or post.author == current_user %}
+                    <form class="comment-delete-form" method="post" action="{% url 'delete_comment' comment.id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <button type="submit" class="comment-delete-btn" aria-label="Delete comment">Delete</button>
+                    </form>
+                  {% endif %}
+                </div>
+              {% empty %}
+                <div class="empty-note">No comments yet.</div>
+              {% endfor %}
+            </div>
+
+            <form class="comment-modal-form" method="post" action="{% url 'add_comment' post.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <input class="comment-input" name="body" type="text" placeholder="Write a comment..." maxlength="500">
+              <button class="comment-send" type="submit">Post</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="comment-modal" id="share-modal-{{ post.id }}" aria-hidden="true">
+          <div class="comment-modal-backdrop" data-share-close></div>
+          <div class="comment-modal-card card" role="dialog" aria-modal="true" aria-label="Share post">
+            <div class="comment-modal-head">
+              <div>
+                <strong>Share post</strong>
+                <p class="muted">Send this post to another Fleek user</p>
+              </div>
+              <button class="modal-close" type="button" data-share-close>&times;</button>
+            </div>
+
+            <div class="share-search-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="search" class="share-search" data-share-search placeholder="Search users to share with" aria-label="Search users to share with">
+            </div>
+
+            <div class="comment-modal-list">
+              {% for person in share_people %}
+                <form
+                  class="share-user-row"
+                  method="post"
+                  action="{% url 'share_post_to_user' post.id %}"
+                  data-share-user
+                  data-share-user-key="{{ person.username|lower }} {{ person.nickname|default:person.username|lower }} {{ person.bio|default:''|lower }}"
+                >
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <input type="hidden" name="recipient_id" value="{{ person.id }}">
+                  <button type="submit" class="share-user-btn">
+                    <span class="suggestion-avatar">
+                      {% if person.avatar_url %}
+                        <img src="{{ person.avatar_url }}" alt="{{ person.username }}" style="object-position: {{ person.avatar_position_x }}% {{ person.avatar_position_y }}%;">
+                      {% else %}
+                        {{ person.username|first|upper }}
+                      {% endif %}
+                    </span>
+                    <span class="share-user-text">
+                      <strong>{{ person.nickname|default:person.username }}</strong>
+                      <small>{{ person.bio|default:"No bio yet" }}</small>
+                    </span>
+                    <span class="share-user-action">Share</span>
+                  </button>
+                </form>
+              {% empty %}
+                <div class="empty-note">No users available to share with.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <section class="card empty-state">
+          <h3>No posts yet</h3>
+          <p class="muted">Everyone&apos;s posts will appear here.</p>
+        </section>
+      {% endfor %}
+    </section>
+  </div>
+
+  <aside class="feed-panel">
+    <section class="profile-card card">
+      <div class="profile-top">
+        <div class="profile-avatar">
+          {% if current_user.avatar_url %}
+            <img
+              src="{{ current_user.avatar_url }}"
+              alt="{{ current_user.username }}"
+              style="object-position: {{ current_user.avatar_position_x }}% {{ current_user.avatar_position_y }}%;"
+            >
+          {% else %}
+            {{ current_user.username|first|upper }}
+          {% endif %}
+        </div>
+        <div class="profile-head-text">
+          <div class="profile-name">{{ current_user.username }}</div>
+          <div class="profile-handle">@{{ current_user.username }}</div>
+        </div>
+        <a class="edit-pill" href="{% url 'create_post' %}">+ Post</a>
+      </div>
+      <div class="profile-stats">
+        <div class="profile-stat">
+          <span class="stat-num">{{ posts|length }}</span>
+          <span class="stat-label">Posts</span>
+        </div>
+        <div class="profile-stat">
+          <span class="stat-num">{{ followers_count }}</span>
+          <span class="stat-label">Followers</span>
+        </div>
+        <div class="profile-stat">
+          <span class="stat-num">{{ following_count }}</span>
+          <span class="stat-label">Following</span>
+        </div>
+      </div>
+      <div class="profile-bio">
+        {{ current_user.bio|default:"Add a bio in settings to introduce yourself."|linebreaksbr }}
+      </div>
+    </section>
+
+    <section class="side-section">
+      <div class="side-head">
+        <h3>Your Followers</h3>
+      </div>
+      <div class="suggestion-list">
+        {% for follower in followers|slice:":6" %}
+          <a class="suggestion-row" href="{% url 'profile' follower.username %}">
+            <div class="suggestion-avatar">{{ follower.username|first|upper }}</div>
+            <div class="suggestion-info">
+              <strong>{{ follower.username }}</strong>
+              <span>{{ follower.bio|default:"No bio yet" }}</span>
+            </div>
+          </a>
+        {% empty %}
+          <div class="empty-note">No followers yet.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </aside>
+</section>
+
+<script>
+  const resetShareModal = (modal) => {
+    if (!modal) return;
+    const input = modal.querySelector('[data-share-search]');
+    if (input) {
+      input.value = '';
+    }
+    modal.querySelectorAll('[data-share-user]').forEach((row) => {
+      row.hidden = false;
+    });
+  };
+
+  document.querySelectorAll('[data-comment-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = document.getElementById(button.dataset.commentOpen);
+      if (modal) {
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-comment-close]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = button.closest('.comment-modal');
+      if (modal) {
+        modal.classList.remove('open');
+        document.body.classList.remove('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-share-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = document.getElementById(button.dataset.shareOpen);
+      if (modal) {
+        resetShareModal(modal);
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+        window.setTimeout(() => {
+          modal.querySelector('[data-share-search]')?.focus();
+        }, 0);
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-share-close]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = button.closest('.comment-modal');
+      if (modal) {
+        modal.classList.remove('open');
+        document.body.classList.remove('modal-open');
+      }
+    });
+  });
+</script>
+{% endblock %}

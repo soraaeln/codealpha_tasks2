@@ -1,0 +1,261 @@
+{% extends "Fleek/base.html" %}
+{% block title %}Create Post | Fleek{% endblock %}
+{% block content %}
+<section class="edit-layout post-create-layout">
+  <section class="edit-hero card">
+    <p class="feed-eyebrow">Fleek</p>
+    <h1 class="edit-title">{{ form_title }}</h1>
+    <p class="muted">{{ form_description }}</p>
+  </section>
+
+  <section class="edit-card card">
+    <form method="post" class="edit-form" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% if submit_label == "Save changes" %}
+      <div class="media-preview-card card hidden">
+        <div class="media-preview-wrapper">
+          <img id="mediaPreviewImage" src="{{ media_src|default:"" }}" alt="Media preview" hidden>
+          <video id="mediaPreviewVideo" controls preload="metadata" hidden>
+            <source id="mediaPreviewVideoSource" src="{{ media_src|default:"" }}">
+            Your browser does not support this video.
+          </video>
+        </div>
+        <div class="media-preview-controls">
+          <button type="button" class="secondary-btn" id="openMediaFrameModal">Adjust frame</button>
+          <input type="hidden" id="mediaPositionX" name="media_position_x" value="{{ media_position_x|default:50 }}">
+          <input type="hidden" id="mediaPositionY" name="media_position_y" value="{{ media_position_y|default:50 }}">
+          <input type="hidden" id="mediaScale" name="media_scale" value="{{ media_scale|default:"1" }}">
+        </div>
+      </div>
+      {% endif %}
+
+      <label>
+        <span>Caption</span>
+        <textarea name="caption" rows="6" placeholder="Write your post...">{{ caption|default:"" }}</textarea>
+      </label>
+      <label>
+        <span>Upload image or video</span>
+        <input id="mediaFileInput" type="file" name="media_file" accept="image/*,video/*">
+      </label>
+      <label>
+        <span>Or image URL</span>
+        <input id="mediaUrlInput" type="url" name="image_url" value="{{ image_url|default:"" }}" placeholder="https://example.com/image.jpg">
+      </label>
+      <div class="edit-actions">
+        <button type="submit">{{ submit_label }}</button>
+        <a class="secondary-btn" href="{% url 'feed' %}">Cancel</a>
+      </div>
+    </form>
+  </section>
+</section>
+
+{% if submit_label == "Save changes" %}
+<div class="frame-modal" id="mediaFrameModal" aria-hidden="true">
+  <div class="frame-modal-backdrop" data-close="true"></div>
+  <div class="frame-modal-content">
+    <div class="frame-modal-header">
+      <h2>Adjust image frame</h2>
+      <button type="button" class="close-button" data-close="true" aria-label="Close">&times;</button>
+    </div>
+    <p class="frame-modal-note">Drag the image inside the frame to reposition what is visible.</p>
+    <div class="frame-zoom-controls">
+      <button type="button" id="frameZoomOutButton" aria-label="Zoom out">&minus;</button>
+      <span class="frame-zoom-label" id="frameZoomLabel">100%</span>
+      <button type="button" id="frameZoomInButton" aria-label="Zoom in">+</button>
+    </div>
+    <div class="frame-adjust-area">
+      <img id="frameAdjustImage" src="{{ media_src|default:"" }}" alt="Frame adjust preview" draggable="false">
+    </div>
+    <div class="frame-modal-actions">
+      <button type="button" class="secondary-btn" id="frameResetButton">Reset</button>
+      <button type="button" id="frameSaveButton">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const mediaFileInput = document.getElementById('mediaFileInput');
+  const mediaUrlInput = document.getElementById('mediaUrlInput');
+  const mediaPreviewImage = document.getElementById('mediaPreviewImage');
+  const mediaPreviewVideo = document.getElementById('mediaPreviewVideo');
+  const mediaPreviewVideoSource = document.getElementById('mediaPreviewVideoSource');
+  const mediaPositionX = document.getElementById('mediaPositionX');
+  const mediaPositionY = document.getElementById('mediaPositionY');
+  const mediaPreviewControls = document.querySelector('.media-preview-controls');
+  const mediaPreviewCard = document.querySelector('.media-preview-card');
+  const openMediaFrameModal = document.getElementById('openMediaFrameModal');
+  const mediaFrameModal = document.getElementById('mediaFrameModal');
+  const frameAdjustImage = document.getElementById('frameAdjustImage');
+  const frameZoomLabel = document.getElementById('frameZoomLabel');
+  const mediaScaleInput = document.getElementById('mediaScale');
+  const frameZoomInButton = document.getElementById('frameZoomInButton');
+  const frameZoomOutButton = document.getElementById('frameZoomOutButton');
+  const frameSaveButton = document.getElementById('frameSaveButton');
+  const frameResetButton = document.getElementById('frameResetButton');
+  const frameCloseButtons = document.querySelectorAll('[data-close="true"]');
+  let frameDragActive = false;
+  let frameStartX = 0;
+  let frameStartY = 0;
+  let frameStartPosX = 50;
+  let frameStartPosY = 50;
+  let currentMediaScale = parseFloat(mediaScaleInput?.value || 1);
+
+  const updateFrameZoomLabel = () => {
+    if (frameZoomLabel) {
+      frameZoomLabel.textContent = `${Math.round(currentMediaScale * 100)}%`;
+    }
+  };
+
+  const setMediaScale = (scale) => {
+    currentMediaScale = Math.min(2, Math.max(1, scale));
+    if (frameAdjustImage) {
+      frameAdjustImage.style.transform = `scale(${currentMediaScale})`;
+      frameAdjustImage.style.transformOrigin = 'center center';
+    }
+    if (mediaPreviewImage) {
+      mediaPreviewImage.style.transform = `scale(${currentMediaScale})`;
+      mediaPreviewImage.style.transformOrigin = 'center center';
+    }
+    if (mediaScaleInput) {
+      mediaScaleInput.value = currentMediaScale.toFixed(2);
+    }
+    updateFrameZoomLabel();
+  };
+
+  const setMediaPosition = (x, y) => {
+    if (typeof x === 'undefined') {
+      x = parseInt(mediaPositionX?.value || 50, 10);
+    }
+    if (typeof y === 'undefined') {
+      y = parseInt(mediaPositionY?.value || 50, 10);
+    }
+    if (mediaPreviewImage) {
+      mediaPreviewImage.style.objectPosition = `${x}% ${y}%`;
+    }
+    if (frameAdjustImage) {
+      frameAdjustImage.style.objectPosition = `${x}% ${y}%`;
+    }
+    if (mediaPositionX) {
+      mediaPositionX.value = x;
+    }
+    if (mediaPositionY) {
+      mediaPositionY.value = y;
+    }
+  };
+
+  const showImagePreview = (src) => {
+    if (!mediaPreviewImage || !mediaPreviewVideo) return;
+    mediaPreviewVideo.hidden = true;
+    mediaPreviewImage.hidden = false;
+    mediaPreviewImage.src = src;
+    mediaPreviewImage.style.objectFit = 'cover';
+    setMediaPosition();
+    setMediaScale(currentMediaScale);
+    if (mediaPreviewCard) {
+      mediaPreviewCard.classList.remove('hidden');
+    }
+    mediaPreviewControls.style.display = 'grid';
+  };
+
+  const showVideoPreview = (src) => {
+    if (!mediaPreviewImage || !mediaPreviewVideo) return;
+    mediaPreviewImage.hidden = true;
+    mediaPreviewVideo.hidden = false;
+    mediaPreviewVideoSource.src = src;
+    mediaPreviewVideo.load();
+    if (mediaPreviewCard) {
+      mediaPreviewCard.classList.remove('hidden');
+    }
+    mediaPreviewControls.style.display = 'none';
+  };
+
+  const openFrameModal = () => {
+    if (!mediaPreviewImage || mediaPreviewImage.hidden) return;
+    frameAdjustImage.src = mediaPreviewImage.src;
+    frameAdjustImage.style.objectFit = 'cover';
+    setMediaPosition();
+    setMediaScale(currentMediaScale);
+    mediaFrameModal.classList.add('open');
+    mediaFrameModal.removeAttribute('aria-hidden');
+  };
+
+  const closeFrameModal = () => {
+    mediaFrameModal.classList.remove('open');
+    mediaFrameModal.setAttribute('aria-hidden', 'true');
+  };
+
+  const moveFrame = (deltaX, deltaY) => {
+    const currentX = parseInt(mediaPositionX.value || 50, 10);
+    const currentY = parseInt(mediaPositionY.value || 50, 10);
+    const nextX = Math.min(100, Math.max(0, currentX + deltaX));
+    const nextY = Math.min(100, Math.max(0, currentY + deltaY));
+    setMediaPosition(nextX, nextY);
+  };
+
+  mediaFileInput?.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (file.type.startsWith('video/')) {
+        showVideoPreview(reader.result);
+      } else {
+        showImagePreview(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  frameZoomInButton?.addEventListener('click', () => setMediaScale(currentMediaScale + 0.1));
+  frameZoomOutButton?.addEventListener('click', () => setMediaScale(currentMediaScale - 0.1));
+
+  mediaUrlInput?.addEventListener('change', (event) => {
+    const url = event.target.value.trim();
+    if (!url) return;
+    const isVideo = url.match(/\.(mp4|webm|ogg)(\?|$)/i);
+    if (isVideo) {
+      showVideoPreview(url);
+    } else {
+      showImagePreview(url);
+    }
+  });
+
+  openMediaFrameModal?.addEventListener('click', openFrameModal);
+
+  frameAdjustImage?.addEventListener('pointerdown', (event) => {
+    frameDragActive = true;
+    frameStartX = event.clientX;
+    frameStartY = event.clientY;
+    frameStartPosX = parseInt(mediaPositionX.value || 50, 10);
+    frameStartPosY = parseInt(mediaPositionY.value || 50, 10);
+    frameAdjustImage.setPointerCapture(event.pointerId);
+  });
+
+  window.addEventListener('pointermove', (event) => {
+    if (!frameDragActive) return;
+    const deltaX = Math.round((event.clientX - frameStartX) / 3);
+    const deltaY = Math.round((event.clientY - frameStartY) / 3);
+    moveFrame(deltaX, deltaY);
+  });
+
+  window.addEventListener('pointerup', () => {
+    frameDragActive = false;
+  });
+
+  frameSaveButton?.addEventListener('click', closeFrameModal);
+  frameResetButton?.addEventListener('click', () => {
+    setMediaPosition(50, 50);
+    setMediaScale(1);
+  });
+  frameCloseButtons?.forEach((button) => button.addEventListener('click', closeFrameModal));
+
+  if (mediaPreviewImage && mediaPreviewImage.src) {
+    showImagePreview(mediaPreviewImage.src);
+    setMediaScale(currentMediaScale);
+  }
+  if (mediaPreviewVideo && mediaPreviewVideoSource.src) {
+    showVideoPreview(mediaPreviewVideoSource.src);
+  }
+</script>
+{% endif %}
+{% endblock %}

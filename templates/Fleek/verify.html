@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify OTP</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="auth-page">
+  <div class="auth-layout">
+    <div class="auth-panel">
+      <p class="eyebrow">Verify</p>
+      <h1>Secure your account.</h1>
+      <p class="muted">Enter the OTP we sent to finish creating your Fleek account.</p>
+    </div>
+    <div class="card auth-card">
+      <h2>Verify OTP</h2>
+      <p class="muted">We've sent a code to your email.</p>
+      {% if error %}
+        <p class="message">{{ error }}</p>
+      {% endif %}
+      <form method="POST" action="{% url 'verify' %}" class="stack">
+        {% csrf_token %}
+        <input type="email" name="email" value="{{ email }}" placeholder="Enter Email" required>
+        <input type="text" name="code" placeholder="Enter OTP Code" required>
+        <button type="submit">Verify Account</button>
+      </form>
+      <form method="POST" action="{% url 'resend_otp' %}">
+        {% csrf_token %}
+        <input type="hidden" name="email" value="{{ email }}">
+        <button type="submit" class="secondary" style="margin-top:12px;">Resend OTP</button>
+      </form>
+      <p class="muted">Back to <a href="{% url 'signup' %}">Signup</a></p>
+    </div>
+  </div>
+</body>
+</html>

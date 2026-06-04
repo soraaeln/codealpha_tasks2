@@ -1,0 +1,258 @@
+{% extends "Fleek/base.html" %}
+{% block title %}Edit Profile | Fleek{% endblock %}
+{% block content %}
+<section class="edit-layout">
+  <div class="edit-hero card">
+    <p class="feed-eyebrow">Profile</p>
+    <h1 class="edit-title">Edit your profile</h1>
+    <p class="muted">Update your username, email, password, bio, and profile picture.</p>
+  </div>
+
+  <section class="edit-card card">
+    <div class="edit-preview">
+      <div class="edit-avatar">
+        {% if current_user.avatar_url %}
+          <img src="{{ current_user.avatar_url }}" alt="{{ current_user.username }}" style="object-position: {{ current_user.avatar_position_x }}% {{ current_user.avatar_position_y }}%;">
+        {% else %}
+          <span>{{ current_user.username|first|upper }}</span>
+        {% endif %}
+      </div>
+      <div>
+        <h2>{{ current_user.username }}</h2>
+        {% if current_user.nickname %}
+        <p>{{ current_user.nickname }}</p>
+        {% endif %}
+        <p class="muted">@{{ current_user.username }}</p>
+      </div>
+    </div>
+
+    <form method="post" class="edit-form" enctype="multipart/form-data">
+      {% csrf_token %}
+      <label>
+        <span>Username</span>
+        <input type="text" name="username" value="{{ current_user.username }}" placeholder="Username">
+      </label>
+
+      <label>
+        <span>Nickname</span>
+        <input type="text" name="nickname" value="{{ current_user.nickname }}" placeholder="Nickname (not unique)">
+      </label>
+
+      <label>
+        <span>Email</span>
+        <input type="email" name="email" value="{{ current_user.email }}" placeholder="Email">
+      </label>
+
+      <label>
+        <span>Password</span>
+        <input type="password" name="password" placeholder="New password (requires OTP)">
+      </label>
+
+      <label>
+        <span>Confirm password</span>
+        <input type="password" name="password_confirm" placeholder="Confirm new password">
+      </label>
+
+      {% if otp_pending %}
+      <label>
+        <span>OTP code</span>
+        <input type="text" name="otp_code" placeholder="Enter OTP sent to email">
+      </label>
+      {% endif %}
+
+      <label>
+        <span>Upload profile picture</span>
+        <input type="file" name="avatar_file" accept="image/*">
+      </label>
+
+      <div class="frame-adjust-button-row">
+        <button type="button" class="secondary-btn" id="openAvatarFrameModal">Adjust frame</button>
+        <input type="hidden" id="avatarPositionX" name="avatar_position_x" value="{{ current_user.avatar_position_x }}">
+        <input type="hidden" id="avatarPositionY" name="avatar_position_y" value="{{ current_user.avatar_position_y }}">
+        <input type="hidden" id="avatarScale" name="avatar_scale" value="{{ current_user.avatar_scale|default:"1" }}">
+      </div>
+
+      <label>
+        <span>Or image URL</span>
+        <input type="url" name="avatar_url" value="{{ current_user.avatar }}" placeholder="Image URL">
+      </label>
+
+      <label>
+        <span>Bio</span>
+        <textarea name="bio" rows="5" placeholder="Write your bio...">{{ current_user.bio }}</textarea>
+      </label>
+
+      <div class="edit-actions">
+        <button type="submit">Save changes</button>
+        <a class="secondary-btn" href="{% url 'profile' current_user.username %}">Cancel</a>
+      </div>
+    </form>
+  </section>
+</section>
+
+<div class="frame-modal" id="avatarFrameModal" aria-hidden="true">
+  <div class="frame-modal-backdrop" data-close="true"></div>
+  <div class="frame-modal-content">
+    <div class="frame-modal-header">
+      <h2>Adjust avatar frame</h2>
+      <button type="button" class="close-button" data-close="true" aria-label="Close">&times;</button>
+    </div>
+    <p class="frame-modal-note">Drag the avatar image to position it within the circular frame.</p>
+    <div class="frame-zoom-controls">
+      <button type="button" id="avatarZoomOutButton" aria-label="Zoom out">&minus;</button>
+      <span class="frame-zoom-label" id="avatarZoomLabel">100%</span>
+      <button type="button" id="avatarZoomInButton" aria-label="Zoom in">+</button>
+    </div>
+    <div class="frame-adjust-area frame-avatar-area">
+      <img id="avatarFrameImage" src="{{ current_user.avatar_url }}" alt="Avatar adjust preview" draggable="false">
+    </div>
+    <div class="frame-modal-actions">
+      <button type="button" class="secondary-btn" id="avatarFrameResetButton">Reset</button>
+      <button type="button" id="avatarFrameSaveButton">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const avatarInput = document.querySelector('[name="avatar_file"]');
+  const avatarHolder = document.querySelector('.edit-avatar');
+  let avatarImg = avatarHolder.querySelector('img');
+  const avatarPlaceholder = avatarHolder.querySelector('span');
+  const avatarX = document.getElementById('avatarPositionX');
+  const avatarY = document.getElementById('avatarPositionY');
+  const avatarScaleInput = document.getElementById('avatarScale');
+  const openAvatarFrameModal = document.getElementById('openAvatarFrameModal');
+  const avatarFrameModal = document.getElementById('avatarFrameModal');
+  const avatarFrameImage = document.getElementById('avatarFrameImage');
+  const avatarZoomLabel = document.getElementById('avatarZoomLabel');
+  const avatarZoomInButton = document.getElementById('avatarZoomInButton');
+  const avatarZoomOutButton = document.getElementById('avatarZoomOutButton');
+  const avatarFrameSaveButton = document.getElementById('avatarFrameSaveButton');
+  const avatarFrameResetButton = document.getElementById('avatarFrameResetButton');
+  const frameCloseButtons = document.querySelectorAll('[data-close="true"]');
+  let frameDragActive = false;
+  let frameStartX = 0;
+  let frameStartY = 0;
+  let frameStartPosX = 50;
+  let frameStartPosY = 50;
+  let currentAvatarScale = parseFloat(avatarScaleInput?.value || 1);
+
+  const updateAvatarZoomLabel = () => {
+    if (avatarZoomLabel) {
+      avatarZoomLabel.textContent = `${Math.round(currentAvatarScale * 100)}%`;
+    }
+  };
+
+  const setAvatarScale = (scale) => {
+    currentAvatarScale = Math.min(2, Math.max(1, scale));
+    if (avatarFrameImage) {
+      avatarFrameImage.style.transform = `scale(${currentAvatarScale})`;
+      avatarFrameImage.style.transformOrigin = 'center center';
+    }
+    if (avatarScaleInput) {
+      avatarScaleInput.value = currentAvatarScale.toFixed(2);
+    }
+    updateAvatarZoomLabel();
+  };
+
+  const setAvatarPosition = (x, y) => {
+    if (typeof x === 'undefined') {
+      x = parseInt(avatarX?.value || 50, 10);
+    }
+    if (typeof y === 'undefined') {
+      y = parseInt(avatarY?.value || 50, 10);
+    }
+    if (avatarImg) {
+      avatarImg.style.objectPosition = `${x}% ${y}%`;
+    }
+    if (avatarFrameImage) {
+      avatarFrameImage.style.objectPosition = `${x}% ${y}%`;
+    }
+    if (avatarX) avatarX.value = x;
+    if (avatarY) avatarY.value = y;
+  };
+
+  if (avatarImg) {
+    avatarImg.style.objectPosition = `${avatarX?.value || 50}% ${avatarY?.value || 50}%`;
+  }
+
+  const closeAvatarFrameModal = () => {
+    avatarFrameModal.classList.remove('open');
+    avatarFrameModal.setAttribute('aria-hidden', 'true');
+  };
+
+  const openAvatarFrameModalHandler = () => {
+    if (!avatarImg) return;
+    avatarFrameImage.src = avatarImg.src;
+    avatarFrameImage.style.objectFit = 'cover';
+    setAvatarPosition();
+    setAvatarScale(currentAvatarScale);
+    avatarFrameModal.classList.add('open');
+    avatarFrameModal.removeAttribute('aria-hidden');
+  };
+
+  const moveAvatarFrame = (deltaX, deltaY) => {
+    const currentX = parseInt(avatarX.value || 50, 10);
+    const currentY = parseInt(avatarY.value || 50, 10);
+    const nextX = Math.min(100, Math.max(0, currentX + deltaX));
+    const nextY = Math.min(100, Math.max(0, currentY + deltaY));
+    setAvatarPosition(nextX, nextY);
+  };
+
+  avatarInput?.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (!avatarImg) {
+        avatarImg = document.createElement('img');
+        avatarImg.alt = '{{ current_user.username }}';
+        avatarImg.style.width = '100%';
+        avatarImg.style.height = '100%';
+        avatarImg.style.objectFit = 'cover';
+        avatarHolder.innerHTML = '';
+        avatarHolder.appendChild(avatarImg);
+      }
+      avatarImg.src = reader.result;
+      if (avatarPlaceholder) {
+        avatarPlaceholder.style.display = 'none';
+      }
+      setAvatarPosition();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  avatarZoomInButton?.addEventListener('click', () => setAvatarScale(currentAvatarScale + 0.1));
+  avatarZoomOutButton?.addEventListener('click', () => setAvatarScale(currentAvatarScale - 0.1));
+
+  openAvatarFrameModal?.addEventListener('click', openAvatarFrameModalHandler);
+
+  avatarFrameImage?.addEventListener('pointerdown', (event) => {
+    frameDragActive = true;
+    frameStartX = event.clientX;
+    frameStartY = event.clientY;
+    frameStartPosX = parseInt(avatarX?.value || 50, 10);
+    frameStartPosY = parseInt(avatarY?.value || 50, 10);
+    avatarFrameImage.setPointerCapture(event.pointerId);
+  });
+
+  window.addEventListener('pointermove', (event) => {
+    if (!frameDragActive) return;
+    const deltaX = Math.round((event.clientX - frameStartX) / 3);
+    const deltaY = Math.round((event.clientY - frameStartY) / 3);
+    moveAvatarFrame(deltaX, deltaY);
+  });
+
+  window.addEventListener('pointerup', () => {
+    frameDragActive = false;
+  });
+
+  avatarFrameSaveButton?.addEventListener('click', closeAvatarFrameModal);
+  avatarFrameResetButton?.addEventListener('click', () => {
+    setAvatarPosition(50, 50);
+    setAvatarScale(1);
+  });
+  frameCloseButtons?.forEach((button) => button.addEventListener('click', closeAvatarFrameModal));
+</script>
+{% endblock %}

@@ -1,0 +1,420 @@
+{% extends "Fleek/base.html" %}
+{% block title %}{{ profile_user.username }} | Fleek{% endblock %}
+{% block content %}
+<section class="profile-page">
+  <section class="profile-hero card">
+    <div class="profile-hero-top">
+      <div class="profile-photo-wrap">
+        {% if profile_user.avatar_url %}
+          <img class="profile-photo" src="{{ profile_user.avatar_url }}" alt="{{ profile_user.username }}" style="object-position: {{ profile_user.avatar_position_x }}% {{ profile_user.avatar_position_y }}%;">
+        {% else %}
+          <div class="profile-photo profile-photo-placeholder">{{ profile_user.username|first|upper }}</div>
+        {% endif %}
+      </div>
+
+      <div class="profile-copy">
+        <div class="profile-title-row">
+          <h1 class="profile-username">{{ profile_user.username }}</h1>
+        </div>
+        <div class="profile-realname">{{ profile_user.nickname|default:profile_user.username }}</div>
+        <div class="profile-meta">
+          <span><strong>{{ posts|length }}</strong> posts</span>
+          <a href="#" class="profile-meta-link" data-followers-open="followers-modal"><strong>{{ followers_count }}</strong> followers</a>
+          <a href="#" class="profile-meta-link" data-following-open="following-modal"><strong>{{ following_count }}</strong> following</a>
+        </div>
+        <div class="profile-bio-box">
+          <p>{{ profile_user.bio|default:"No bio yet."|linebreaksbr }}</p>
+          {% if profile_user.location %}
+            <p class="muted">{{ profile_user.location }}</p>
+          {% endif %}
+          {% if profile_user.website %}
+            <a href="{{ profile_user.website }}" target="_blank" rel="noreferrer">{{ profile_user.website }}</a>
+          {% endif %}
+        </div>
+
+        <div class="profile-actions">
+          {% if profile_user == current_user %}
+            <a class="profile-btn primary" href="{% url 'edit_profile' %}">Edit profile</a>
+            <a class="profile-btn" href="{% url 'logout' %}">Logout</a>
+          {% else %}
+            <form method="post" action="{% url 'toggle_follow' profile_user.username %}">
+              {% csrf_token %}
+              <button type="submit" class="profile-btn primary">{{ is_following|yesno:"Unfollow,Follow" }}</button>
+            </form>
+            <a class="profile-btn" href="{% url 'chat_thread' profile_user.username %}">Message</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="comment-modal" id="followers-modal" aria-hidden="true">
+    <div class="comment-modal-backdrop" data-followers-close></div>
+    <div class="comment-modal-card card follow-modal-card" role="dialog" aria-modal="true" aria-label="Followers">
+      <div class="comment-modal-head">
+        <div>
+          <strong>Followers</strong>
+          <p class="muted">People who follow {{ profile_user.username }}</p>
+        </div>
+        <button class="modal-close" type="button" data-followers-close>&times;</button>
+      </div>
+      <div class="comment-modal-list">
+        {% for follower in followers_list %}
+          <a class="profile-follow-row" href="{% url 'profile' follower.username %}">
+            <span class="profile-follow-avatar">
+              {% if follower.avatar_url %}
+                <img
+                  class="profile-follow-avatar-img"
+                  src="{{ follower.avatar_url }}"
+                  alt="{{ follower.username }}"
+                  data-avatar-position-x="{{ follower.avatar_position_x }}"
+                  data-avatar-position-y="{{ follower.avatar_position_y }}"
+                >
+              {% else %}
+                <span class="profile-follow-avatar-fallback">{{ follower.username|first|upper }}</span>
+              {% endif %}
+            </span>
+            <span class="profile-follow-text">
+              <strong>{{ follower.username }}</strong>
+              <small>{{ follower.nickname|default:follower.username }}</small>
+            </span>
+          </a>
+        {% empty %}
+          <div class="empty-note">No followers yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="comment-modal" id="following-modal" aria-hidden="true">
+    <div class="comment-modal-backdrop" data-following-close></div>
+    <div class="comment-modal-card card follow-modal-card" role="dialog" aria-modal="true" aria-label="Following">
+      <div class="comment-modal-head">
+        <div>
+          <strong>Following</strong>
+          <p class="muted">People {{ profile_user.username }} is following</p>
+        </div>
+        <button class="modal-close" type="button" data-following-close>&times;</button>
+      </div>
+      <div class="comment-modal-list">
+        {% for person in following_list %}
+          <a class="profile-follow-row" href="{% url 'profile' person.username %}">
+            <span class="profile-follow-avatar">
+              {% if person.avatar_url %}
+                <img
+                  class="profile-follow-avatar-img"
+                  src="{{ person.avatar_url }}"
+                  alt="{{ person.username }}"
+                  data-avatar-position-x="{{ person.avatar_position_x }}"
+                  data-avatar-position-y="{{ person.avatar_position_y }}"
+                >
+              {% else %}
+                <span class="profile-follow-avatar-fallback">{{ person.username|first|upper }}</span>
+              {% endif %}
+            </span>
+            <span class="profile-follow-text">
+              <strong>{{ person.username }}</strong>
+              <small>{{ person.nickname|default:person.username }}</small>
+            </span>
+          </a>
+        {% empty %}
+          <div class="empty-note">No following yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <section class="profile-grid">
+    <div class="profile-grid-title">
+      <h2>{% if profile_user == current_user %}My Posts{% else %}Posts{% endif %}</h2>
+    </div>
+
+    {% for post in posts %}
+      <article class="profile-post card" id="post-{{ post.id }}">
+        <div class="profile-post-media">
+          {% if post.media_src %}
+            {% if post.is_video %}
+              <video controls preload="metadata" class="profile-video">
+                <source src="{{ post.media_src }}">
+                Your browser does not support this video.
+              </video>
+            {% else %}
+              <img src="{{ post.media_src }}" alt="{{ post.caption }}" style="object-position: {{ post.media_position_x }}% {{ post.media_position_y }}%;">
+            {% endif %}
+          {% else %}
+            <div class="profile-post-empty">
+              <div class="profile-post-initial">{{ post.caption|first|default:profile_user.username|first|upper }}</div>
+              <p>{{ post.caption|truncatechars:120 }}</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="profile-post-body">
+          <div class="profile-post-head">
+            <div>
+              <strong>{{ profile_user.username }}</strong>
+              <span>{{ post.created_at|date:"M d, Y H:i" }}</span>
+            </div>
+            <div class="profile-post-head-right">
+              <span class="post-counts">{{ post.likes_count }} likes &middot; {{ post.comments_count }} comments</span>
+              {% if post.author == current_user %}
+                <div class="post-menu">
+                  <button
+                    class="post-menu-button"
+                    type="button"
+                    data-menu-toggle="post-menu-{{ post.id }}"
+                    aria-expanded="false"
+                    aria-label="Post options"
+                  >
+                    <i class="fa-solid fa-ellipsis"></i>
+                  </button>
+                  <div class="post-menu-popover" id="post-menu-{{ post.id }}" aria-hidden="true">
+                    <a class="post-menu-item" href="{% url 'edit_post' post.id %}">Edit</a>
+                    <form method="post" action="{% url 'delete_post' post.id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <button type="submit" class="post-menu-item post-menu-delete">Delete</button>
+                    </form>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <p class="profile-post-caption">{{ post.caption|linebreaksbr }}</p>
+
+          <div class="profile-post-actions">
+            <form method="post" action="{% url 'toggle_like' post.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="mini-action{% if post.id in liked_post_ids %} liked{% endif %}">
+                <i class="{% if post.id in liked_post_ids %}fa-solid{% else %}fa-regular{% endif %} fa-heart"></i>
+                Like
+              </button>
+            </form>
+            <button class="mini-action" type="button" data-comment-open="comments-modal-{{ post.id }}">
+              <i class="fa-regular fa-comment"></i>
+              Comment
+            </button>
+            <button type="button" class="mini-action{% if post.id in shared_post_ids %} liked{% endif %}" data-share-open="share-modal-{{ post.id }}">
+              <i class="fa-regular fa-paper-plane"></i>
+              Share
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <div class="comment-modal" id="comments-modal-{{ post.id }}" aria-hidden="true">
+        <div class="comment-modal-backdrop" data-comment-close></div>
+        <div class="comment-modal-card card" role="dialog" aria-modal="true" aria-label="Comments">
+          <div class="comment-modal-head">
+            <div>
+              <strong>Comments</strong>
+              <p class="muted">All comments on this post</p>
+            </div>
+            <button class="modal-close" type="button" data-comment-close>&times;</button>
+          </div>
+
+          <div class="comment-modal-post comment-modal-post--simple">
+            <div>
+              <strong>{{ post.author.username }}</strong>
+              <p>{{ post.caption|linebreaksbr }}</p>
+            </div>
+          </div>
+
+          <div class="comment-modal-list">
+            {% for comment in post.comments.all %}
+              <div class="comment-row">
+                <div class="comment-row-main">
+                  <strong>{{ comment.author.username }}</strong>
+                  <span>{{ comment.body|linebreaksbr }}</span>
+                </div>
+                {% if comment.author == current_user or post.author == current_user %}
+                  <form class="comment-delete-form" method="post" action="{% url 'delete_comment' comment.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="comment-delete-btn" aria-label="Delete comment">Delete</button>
+                  </form>
+                {% endif %}
+              </div>
+            {% empty %}
+              <div class="empty-note">No comments yet.</div>
+            {% endfor %}
+          </div>
+
+          <form class="comment-modal-form" method="post" action="{% url 'add_comment' post.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <input class="comment-input" name="body" type="text" placeholder="Write a comment..." maxlength="500">
+            <button class="comment-send" type="submit">Post</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="comment-modal" id="share-modal-{{ post.id }}" aria-hidden="true">
+        <div class="comment-modal-backdrop" data-share-close></div>
+        <div class="comment-modal-card card" role="dialog" aria-modal="true" aria-label="Share post">
+          <div class="comment-modal-head">
+            <div>
+              <strong>Share post</strong>
+              <p class="muted">Send this post to another Fleek user</p>
+            </div>
+            <button class="modal-close" type="button" data-share-close>&times;</button>
+          </div>
+
+          <div class="share-search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" class="share-search" data-share-search placeholder="Search users to share with" aria-label="Search users to share with">
+          </div>
+
+          <div class="comment-modal-list">
+            {% for person in share_people %}
+              <form class="share-user-row" method="post" action="{% url 'share_post_to_user' post.id %}" data-share-user data-share-user-key="{{ person.username|lower }} {{ person.nickname|default:person.username|lower }} {{ person.bio|default:''|lower }}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <input type="hidden" name="recipient_id" value="{{ person.id }}">
+                <button type="submit" class="share-user-btn">
+                  <span class="suggestion-avatar">
+                    {% if person.avatar_url %}
+                      <img
+                        src="{{ person.avatar_url }}"
+                        alt="{{ person.username }}"
+                        style="object-position: {{ person.avatar_position_x }}% {{ person.avatar_position_y }}%;"
+                      >
+                    {% else %}
+                      {{ person.username|first|upper }}
+                    {% endif %}
+                  </span>
+                  <span class="share-user-text">
+                    <strong>{{ person.nickname|default:person.username }}</strong>
+                    <small>{{ person.bio|default:"No bio yet" }}</small>
+                  </span>
+                  <span class="share-user-action">Share</span>
+                </button>
+              </form>
+            {% empty %}
+              <div class="empty-note">No users available to share with.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="card empty-state">
+        <h3>No posts yet</h3>
+        <p class="muted">This user hasn&apos;t posted anything yet.</p>
+      </div>
+    {% endfor %}
+  </section>
+</section>
+
+<script>
+  const resetShareModal = (modal) => {
+    if (!modal) return;
+    const input = modal.querySelector('[data-share-search]');
+    if (input) {
+      input.value = '';
+    }
+    modal.querySelectorAll('[data-share-user]').forEach((row) => {
+      row.hidden = false;
+    });
+  };
+
+  document.querySelectorAll('[data-comment-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = document.getElementById(button.dataset.commentOpen);
+      if (modal) {
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-comment-close]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = button.closest('.comment-modal');
+      if (modal) {
+        modal.classList.remove('open');
+        document.body.classList.remove('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-share-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = document.getElementById(button.dataset.shareOpen);
+      if (modal) {
+        resetShareModal(modal);
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+        window.setTimeout(() => {
+          modal.querySelector('[data-share-search]')?.focus();
+        }, 0);
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-share-close]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = button.closest('.comment-modal');
+      if (modal) {
+        modal.classList.remove('open');
+        document.body.classList.remove('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-followers-open]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const modal = document.getElementById(button.dataset.followersOpen);
+      if (modal) {
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-following-open]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const modal = document.getElementById(button.dataset.followingOpen);
+      if (modal) {
+        modal.classList.add('open');
+        document.body.classList.add('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-followers-close], [data-following-close]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const modal = button.closest('.comment-modal');
+      if (modal) {
+        modal.classList.remove('open');
+        document.body.classList.remove('modal-open');
+      }
+    });
+  });
+
+  document.querySelectorAll('.profile-follow-avatar-img').forEach((img) => {
+    const posX = img.dataset.avatarPositionX || '50';
+    const posY = img.dataset.avatarPositionY || '50';
+    img.style.objectPosition = `${posX}% ${posY}%`;
+  });
+
+  const highlightPostFromHash = () => {
+    const hash = window.location.hash;
+    if (!hash || !hash.startsWith('#post-')) return;
+    const targetPost = document.querySelector(hash);
+    if (!targetPost) return;
+
+    targetPost.classList.add('post-highlight');
+    targetPost.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    window.setTimeout(() => {
+      targetPost.classList.remove('post-highlight');
+    }, 5000);
+  };
+
+  window.addEventListener('load', highlightPostFromHash);
+</script>
+{% endblock %}

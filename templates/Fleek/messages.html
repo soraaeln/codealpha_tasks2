@@ -1,0 +1,200 @@
+{% extends "Fleek/base.html" %}
+{% load tz %}
+{% load chat_extras %}
+{% block title %}Messages | Fleek{% endblock %}
+{% block content %}
+<section class="edit-layout messages-layout">
+  <section class="edit-hero card">
+    <p class="feed-eyebrow">Inbox</p>
+    <h1 class="edit-title">Messages</h1>
+    <p class="muted">Chat with other Fleek users and send direct messages or shared posts.</p>
+  </section>
+
+  <section class="edit-card card messages-card">
+    <div class="messages-shell">
+      <aside class="messages-sidebar">
+        <div class="side-head">
+          <h3>Chats</h3>
+        </div>
+        <div class="conversation-list">
+          {% for person in conversations %}
+            <a class="conversation-row{% if thread_user and thread_user.username == person.username %} active{% endif %}"
+              href="{% url 'chat_thread' person.username %}">
+              <div class="suggestion-avatar">
+                {% if person.avatar_url %}
+                  <img
+                    src="{{ person.avatar_url }}"
+                    alt="{{ person.username }}"
+                    style="object-position: {{ person.avatar_position_x }}% {{ person.avatar_position_y }}%;"
+                  >
+                {% else %}
+                  {{ person.username|first|upper }}
+                {% endif %}
+              </div>
+              <div class="suggestion-info">
+                <strong>{{ person.username }}</strong>
+              </div>
+            </a>
+          {% empty %}
+            <div class="empty-note">No conversations yet. Open a profile to start messaging.</div>
+          {% endfor %}
+        </div>
+      </aside>
+
+      <section class="messages-thread">
+        {% if thread_user %}
+          <div class="thread-header">
+            <div class="suggestion-avatar">
+              {% if thread_user.avatar_url %}
+                <img
+                  src="{{ thread_user.avatar_url }}"
+                  alt="{{ thread_user.username }}"
+                  style="object-position: {{ thread_user.avatar_position_x }}% {{ thread_user.avatar_position_y }}%;"
+                >
+              {% else %}
+                {{ thread_user.username|first|upper }}
+              {% endif %}
+            </div>
+            <div>
+              <strong>{{ thread_user.username }}</strong>
+              <p class="muted">Chat with {{ thread_user.username }}</p>
+            </div>
+          </div>
+
+          <div class="thread-messages">
+            {% for message in thread_messages %}
+              <div class="chat-bubble{% if message.sender == current_user %} outgoing{% else %} incoming{% endif %}" id="message-{{ message.id }}"{% if message.sender == current_user %} data-chat-bubble="true"{% endif %}>
+                {% if message.sender == current_user %}
+                  <div class="post-menu chat-message-menu">
+                    <button
+                      class="post-menu-button chat-message-menu-button"
+                      type="button"
+                      data-menu-toggle="message-menu-{{ message.id }}"
+                      aria-expanded="false"
+                      aria-label="Message options"
+                    >
+                      <i class="fa-solid fa-ellipsis"></i>
+                    </button>
+                    <div class="post-menu-popover chat-message-popover" id="message-menu-{{ message.id }}" aria-hidden="true">
+                      {% if message.body %}
+                        <button
+                          type="button"
+                          class="post-menu-item chat-edit-message-btn"
+                          data-edit-message
+                          data-message-id="{{ message.id }}"
+                          data-message-body="{{ message.body|escapejs }}"
+                        >
+                          Edit
+                        </button>
+                      {% endif %}
+                      <form method="post" action="{% url 'delete_message' message.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="post-menu-item post-menu-delete">Delete</button>
+                      </form>
+                    </div>
+                  </div>
+                {% endif %}
+                <div class="chat-bubble-content">
+                  {% if message.body %}
+                    <p>{{ message.body|linebreaksbr }}</p>
+                  {% endif %}
+                  {% if message.post %}
+                    <a class="chat-post-preview" href="{% url 'profile' message.post.author.username %}#post-{{ message.post.id }}">
+                      <strong>Shared post from {{ message.post.author.username }}</strong>
+                      <span>{{ message.post.caption|truncatechars:80 }}</span>
+                    </a>
+                  {% endif %}
+                </div>
+                <time class="chat-time">{{ message.created_at|chat_timestamp }}</time>
+              </div>
+            {% empty %}
+              <div class="empty-note">No messages in this chat yet. Say hello!</div>
+            {% endfor %}
+          </div>
+
+          <div class="chat-compose-state" id="chatComposeState" hidden>
+            <div>
+              <strong>Editing message</strong>
+              <p class="muted" id="chatComposeStateText"></p>
+            </div>
+            <button type="button" class="chat-edit-cancel" id="cancelChatEdit">Cancel</button>
+          </div>
+
+          <form class="chat-form" id="chat-composer" method="post" action="{% url 'chat_thread' thread_user.username %}">
+            {% csrf_token %}
+            <input type="hidden" name="editing_message_id" id="editingMessageId" value="">
+            <input class="chat-input" id="chatMessageInput" name="body" type="text" placeholder="Type a message..." maxlength="600" autocomplete="off">
+            <button class="chat-send" id="chatSendButton" type="submit">Send</button>
+          </form>
+        {% else %}
+          <div class="empty-state">
+            <h3>Select a chat</h3>
+            <p class="muted">Pick a conversation from the left or visit a profile to start messaging.</p>
+          </div>
+        {% endif %}
+      </section>
+    </div>
+  </section>
+</section>
+<script>
+  const chatMessageInput = document.getElementById('chatMessageInput');
+  const editingMessageIdInput = document.getElementById('editingMessageId');
+  const chatSendButton = document.getElementById('chatSendButton');
+  const chatComposeState = document.getElementById('chatComposeState');
+  const chatComposeStateText = document.getElementById('chatComposeStateText');
+  const cancelChatEditButton = document.getElementById('cancelChatEdit');
+
+  const resetChatEditMode = () => {
+    if (editingMessageIdInput) editingMessageIdInput.value = '';
+    if (chatSendButton) chatSendButton.textContent = 'Send';
+    if (chatMessageInput) chatMessageInput.placeholder = 'Type a message...';
+    if (chatComposeState) chatComposeState.hidden = true;
+    if (chatComposeStateText) chatComposeStateText.textContent = '';
+  };
+
+  document.querySelectorAll('[data-edit-message]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!chatMessageInput || !editingMessageIdInput || !chatSendButton || !chatComposeState || !chatComposeStateText) return;
+      editingMessageIdInput.value = button.dataset.messageId || '';
+      chatMessageInput.value = button.dataset.messageBody || '';
+      chatMessageInput.placeholder = 'Edit your message...';
+      chatSendButton.textContent = 'Update';
+      chatComposeState.hidden = false;
+      chatComposeStateText.textContent = chatMessageInput.value;
+      chatMessageInput.focus();
+
+      document.querySelectorAll('.post-menu-popover').forEach((popover) => popover.setAttribute('aria-hidden', 'true'));
+      document.querySelectorAll('[data-menu-toggle]').forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
+    });
+  });
+
+  document.querySelectorAll('[data-chat-bubble="true"]').forEach((bubble) => {
+    bubble.addEventListener('click', (event) => {
+      if (event.target.closest('.chat-message-menu, .post-menu-popover, a, button, form')) {
+        return;
+      }
+      bubble.classList.toggle('menu-open');
+      document.querySelectorAll('[data-chat-bubble="true"]').forEach((otherBubble) => {
+        if (otherBubble !== bubble) {
+          otherBubble.classList.remove('menu-open');
+        }
+      });
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('[data-chat-bubble="true"], .post-menu-popover, .post-menu-button')) {
+      return;
+    }
+    document.querySelectorAll('[data-chat-bubble="true"]').forEach((bubble) => bubble.classList.remove('menu-open'));
+  });
+
+  cancelChatEditButton?.addEventListener('click', () => {
+    if (chatMessageInput) chatMessageInput.value = '';
+    resetChatEditMode();
+  });
+
+  resetChatEditMode();
+</script>
+{% endblock %}

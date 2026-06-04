@@ -1,0 +1,134 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Fleek{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+  {% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'signup' or request.resolver_match.url_name == 'verify' or request.resolver_match.url_name == 'forgot_password' or request.resolver_match.url_name == 'reset_password' %}
+    <main class="page-content auth-page-wrap">
+  {% else %}
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <div class="sidebar-logo">fl</div>
+        <nav class="sidebar-nav">
+          <a href="{% url 'feed' %}" class="{% if request.resolver_match.url_name == 'feed' %}active{% endif %}" data-label="Home"><i class="fa-solid fa-house"></i></a>
+          <a href="{% url 'create_post' %}" class="{% if request.resolver_match.url_name == 'create_post' %}active{% endif %}" data-label="Create Post"><i class="fa-solid fa-plus"></i></a>
+          <a href="{% url 'profile' current_user.username %}" class="{% if request.resolver_match.url_name == 'profile' %}active{% endif %}" data-label="Profile"><i class="fa-regular fa-user"></i></a>
+          <a href="{% url 'edit_profile' %}" class="{% if request.resolver_match.url_name == 'edit_profile' %}active{% endif %}" data-label="Edit Profile"><i class="fa-solid fa-pen-to-square"></i></a>
+          <a href="{% url 'feed' %}?q=" data-label="Search"><i class="fa-solid fa-magnifying-glass"></i></a>
+          <a href="{% url 'messages' %}" class="{% if request.resolver_match.url_name == 'messages' %}active{% endif %}" data-label="Messages"><i class="fa-regular fa-envelope"></i></a>
+          <a href="{% url 'logout' %}" data-label="Logout"><i class="fa-solid fa-right-from-bracket"></i></a>
+        </nav>
+        <button type="button" class="theme-toggle-btn" data-theme-toggle aria-label="Toggle theme">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+        <a class="sidebar-avatar" href="{% url 'profile' current_user.username %}" title="My profile">
+          {% if current_user.avatar_url %}
+            <img
+              class="sidebar-avatar-img"
+              src="{{ current_user.avatar_url }}"
+              alt="{{ current_user.username }}"
+              data-avatar-position-x="{{ current_user.avatar_position_x }}"
+              data-avatar-position-y="{{ current_user.avatar_position_y }}"
+            >
+          {% else %}
+            <i class="fa-regular fa-user"></i>
+          {% endif %}
+        </a>
+      </aside>
+      <main class="page-content app-content">
+  {% endif %}
+        {% if messages %}
+          <div class="messages">
+            {% for message in messages %}
+              <div class="message">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+  {% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'signup' or request.resolver_match.url_name == 'verify' or request.resolver_match.url_name == 'forgot_password' or request.resolver_match.url_name == 'reset_password' %}
+    </main>
+  {% else %}
+      </main>
+    </div>
+  {% endif %}
+
+  <script>
+    (function () {
+      const themeKey = 'fleek_theme';
+      const toggle = document.querySelector('[data-theme-toggle]');
+      const icon = toggle?.querySelector('i');
+      const body = document.body;
+
+      const applyTheme = (theme) => {
+        body.classList.remove('light-theme', 'dark-theme');
+        body.classList.add(`${theme}-theme`);
+        localStorage.setItem(themeKey, theme);
+        if (icon) {
+          icon.className = theme === 'dark' ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+        }
+      };
+
+      let currentTheme = localStorage.getItem(themeKey);
+      if (!currentTheme) {
+        currentTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      applyTheme(currentTheme);
+
+      toggle?.addEventListener('click', () => {
+        applyTheme(body.classList.contains('dark-theme') ? 'light' : 'dark');
+      });
+
+      document.querySelectorAll('.sidebar-avatar-img').forEach((img) => {
+        const posX = img.dataset.avatarPositionX || '50';
+        const posY = img.dataset.avatarPositionY || '50';
+        img.style.objectPosition = `${posX}% ${posY}%`;
+      });
+
+      document.querySelectorAll('[data-menu-toggle]').forEach((button) => {
+        const menuId = button.dataset.menuToggle;
+        const menu = document.getElementById(menuId);
+        button.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const isOpen = menu?.getAttribute('aria-hidden') === 'false';
+          document.querySelectorAll('.post-menu-popover').forEach((popover) => popover.setAttribute('aria-hidden', 'true'));
+          document.querySelectorAll('[data-menu-toggle]').forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
+          if (!isOpen && menu) {
+            menu.setAttribute('aria-hidden', 'false');
+            button.setAttribute('aria-expanded', 'true');
+          }
+        });
+      });
+
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.post-menu-popover').forEach((popover) => popover.setAttribute('aria-hidden', 'true'));
+        document.querySelectorAll('[data-menu-toggle]').forEach((btn) => btn.setAttribute('aria-expanded', 'false'));
+      });
+
+      document.querySelectorAll('.post-menu-popover').forEach((popover) => {
+        popover.addEventListener('click', (event) => event.stopPropagation());
+      });
+
+      document.querySelectorAll('[data-share-search]').forEach((input) => {
+        const modal = input.closest('.comment-modal');
+        const rows = modal ? Array.from(modal.querySelectorAll('[data-share-user]')) : [];
+        input.addEventListener('input', () => {
+          const term = input.value.trim().toLowerCase();
+          rows.forEach((row) => {
+            const key = (row.dataset.shareUserKey || '').toLowerCase();
+            row.hidden = Boolean(term) && !key.includes(term);
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
